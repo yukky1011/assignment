@@ -20,13 +20,13 @@
     header('Location: login.php');
   }
 
-  if (!empty($_GET['tweet_id'])) {
+  if (!empty($_GET['diary_id'])) {
     
-    $sql = 'SELECT `tweets`.*, `members`.`nick_name`, `members`.`picture_path` FROM `tweets` LEFT JOIN `members` ON `tweets`.`member_id` = `members`.`member_id` WHERE `tweet_id` = ?';
-    $data = array($_GET['tweet_id']);
+    $sql = 'SELECT `diary`.*, `members`.`nick_name`, `members`.`picture_path` FROM `diary` LEFT JOIN `members` ON `diary`.`user_id` = `members`.`member_id` WHERE `diary_id` = ?';
+    $data = array($_GET['diary_id']);
     $stmt = $dbh->prepare($sql);
     $stmt->execute($data);
-    $tweet = $stmt->fetch(PDO::FETCH_ASSOC);
+    $diary = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 
@@ -39,7 +39,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>SeedSNS</title>
+    <title>Diary</title>
 
     <!-- Bootstrap -->
     <link href="assets/css/bootstrap.css" rel="stylesheet">
@@ -60,7 +60,7 @@
                   <span class="icon-bar"></span>
                   <span class="icon-bar"></span>
               </button>
-              <a class="navbar-brand" href="index.html"><span class="strong-title"><i class="fa fa-twitter-square"></i> Seed SNS</span></a>
+              <a class="navbar-brand" href="index.html"><span class="strong-title"><i class="fa fa-twitter-square"></i> Diary</span></a>
           </div>
           <!-- Collect the nav links, forms, and other content for toggling -->
           <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
@@ -77,21 +77,25 @@
     <div class="row">
       <div class="col-md-4 col-md-offset-4 content-margin-top">
         <div class="msg">
-          <img src="picture_path/<?php echo $tweet['picture_path'] ?>" width="100" height="100">
-          <p style="display: inline-block; float: left;">投稿者 : <span class="name"> <?php echo $tweet['nick_name'] ?> </span></p>
+          <img src="picture_path/<?php echo $diary['picture_path'] ?>" width="100" height="100">
+          <p style="display: inline-block; float: left;">投稿者 : <span class="name"> <?php echo $diary['nick_name'] ?> </span></p>
           <p class="day" style="margin-top: 7px;">
-            <?php echo date('y-m-d h:i', strtotime($tweet['modified'])); ?>
-            <?php if ($tweet['member_id'] == $login_user['member_id']): ?>
-              [<a href="delete.php?action=delete&tweet_id=<?php echo $_GET['tweet_id'] ?>" style="color: #F33;">削除</a>]
+            <?php echo date('y-m-d h:i', strtotime($diary['modified'])); ?>
+            <?php if ($diary['user_id'] == $login_user['member_id']): ?>
+              [<a href="delete.php?action=delete&diary_id=<?php echo $_GET['diary_id'] ?>" style="color: #F33;">削除</a>]
             <?php endif ?>
           </p>
           <p>
-            つぶやき : <br>
-            <?php echo $tweet['tweet']; ?>
+            タイトル :
+            <?php echo $diary['title']; ?>
+          </p>
+          <p>
+            投稿 : 
+            <?php echo $diary['contents']; ?>
           </p>
           <div class="post_image" style="width: 300px; margin-left: 100px; display: inline-block;">
-            <?php if (!empty($tweet['image_path'])): ?>
-              <img src="image_path/<?php echo $tweet['image_path'] ?>" alt="" style="width: 300px;, height: 300px;, display: block;">
+            <?php if (!empty($diary['image_path'])): ?>
+              <img src="image_path/<?php echo $diary['image_path'] ?>" alt="" style="width: 300px;, height: 300px;, display: block;">
             <?php endif ?>
           </div>
         </div>

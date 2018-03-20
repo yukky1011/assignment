@@ -6,10 +6,13 @@
   echo '<br>';
   echo '<br>';
   echo '<br>';
+  echo 'post:';
   var_dump($_POST);
   echo '<br>';
+  echo 'files:';
   var_dump($_FILES);
   echo '<br>';
+  echo 'session:';
   var_dump($_SESSION);
 
   // ログインちぇっく
@@ -33,7 +36,7 @@
   }
 
   // 呟くボタンが押された時
-  if (!empty($_POST)) {
+  if (!empty($_POST) && !empty($_POST['action']) && $_POST['action'] == 'post') {
     // 入力チェック
 
     $ext = substr($_FILES['image_path']['name'], -3);
@@ -67,73 +70,133 @@
     }
   }
 
-  // ページング機能
-  // 空の変数を用意
-  $page = '';
+  // search機能
+  if (isset($_GET['search']) && $_GET['search'] != '') {
+    // 検索かかっている時
+    $page = '';
 
-  // パラメータが存在していた場合ページ番号を代入
-  if (isset($_GET['page'])) {
-    $page = $_GET['page'];
+    if (isset($_GET['page'])) {
+      $page = $_GET['page'];
+    }else{
+      $page = 1;
+    }
+
+      $page = max($page, 1);
+
+      $page_number = 5;
+
+      echo 'search';
+      echo '<br>';
+      $page_sql = "SELECT COUNT(*) AS `page_count` FROM `diary` WHERE `delete_flag` = 0 AND `contents` LIKE '%"."{$_GET['search']}"."%'";
+      $page_stmt = $dbh->prepare($page_sql);
+      $page_stmt->execute();
+
+      $page_count = $page_stmt->fetch(PDO::FETCH_ASSOC);
+      var_dump($page_count);
+      echo '<br>';
+
+      $all_page_number = ceil($page_count['page_count'] / $page_number);
+      $page = min($page, $all_page_number);
+
+      $start = ($page - 1) * $page_number;
+
+      $diary_sql = "SELECT `diary`.*, `members`.`nick_name`, `members`.`picture_path`, `likes_count`, `like_on`
+                    FROM `diary` 
+                    LEFT JOIN `members` ON `diary`.`user_id` = `members`.`member_id` 
+                    LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `likes_count` FROM `likes` GROUP BY `diary_id`) table1 ON `diary`.`diary_id` = `table1`.`diary_id`
+                    LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `like_on` FROM `likes` WHERE `member_id` = ? GROUP BY `diary_id`) table2 ON `diary`.`diary_id` = `table2`.`diary_id`
+                    WHERE `delete_flag` = 0 AND `contents` LIKE '%"."{$_GET['search']}"."%'"."
+                    ORDER BY `diary`.`modified` DESC LIMIT $start, $page_number";
+      $diary_data = array($_SESSION['id']);
+      $diary_stmt = $dbh->prepare($diary_sql);
+      $diary_stmt->execute($diary_data);
+
+      $diary_list = array();
+      while(true){
+
+        $diary = $diary_stmt->fetch(PDO::FETCH_ASSOC);
+        if($diary == false){
+          break;
+        }
+        if ($diary['likes_count'] == null) {
+          $diary['likes_count'] = 0;
+        }
+        if ($diary['like_on'] == null) {
+          $diary['like_on'] = 0;
+        }
+        $diary_list[] = $diary;
+      }
+      var_dump($diary_list);
   }else{
-    $page = 1;
-  }
+    // 検索無しの時
+    // ページング機能
+    // 空の変数を用意
+    $page = '';
 
-    // 1以外のイレギュラーな数字が入ってきた時、ページ番号を強制的に１とする
-    // max　カンマ区切りで羅列された数字の中から最大の数字を取得する
-    $page = max($page, 1);
+    // パラメータが存在していた場合ページ番号を代入
+    if (isset($_GET['page'])) {
+      $page = $_GET['page'];
+    }else{
+      $page = 1;
+    }
 
-    // 1ページ分の表示件数を指定
-    $page_number = 5;
+      // 1以外のイレギュラーな数字が入ってきた時、ページ番号を強制的に１とする
+      // max　カンマ区切りで羅列された数字の中から最大の数字を取得する
+      $page = max($page, 1);
 
-    // データの件数から最大ページを計算する
-    $page_sql = 'SELECT COUNT(*) AS `page_count` FROM `diary` WHERE `delete_flag` = 0';
-    $page_stmt = $dbh->prepare($page_sql);
-    $page_stmt->execute();
+      // 1ページ分の表示件数を指定
+      $page_number = 5;
 
-    $page_count = $page_stmt->fetch(PDO::FETCH_ASSOC);
+      // データの件数から最大ページを計算する
+      $page_sql = 'SELECT COUNT(*) AS `page_count` FROM `diary` WHERE `delete_flag` = 0';
+      $page_stmt = $dbh->prepare($page_sql);
+      $page_stmt->execute();
 
-    $all_page_number = ceil($page_count['page_count'] / $page_number);
-    // パラメータのページ番号が最大ページを超えていれば、強制的に最後のページとする
-    $page = min($page, $all_page_number);
+      $page_count = $page_stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 表示するデータの取得開始場所
-    $start = ($page - 1) * $page_number;
+      $all_page_number = ceil($page_count['page_count'] / $page_number);
+      // パラメータのページ番号が最大ページを超えていれば、強制的に最後のページとする
+      $page = min($page, $all_page_number);
 
-
-
-
+      // 表示するデータの取得開始場所
+      $start = ($page - 1) * $page_number;
 
 
-    // 一覧用の投稿全件取得
-    // テーブル結合
-    //  INNER JOIN と OUTER JOIN(left join と right join)
-    // INNER JOIN = 両方のテーブルに存在するデータのみ取得
-    // OUTER JOIN(left join と right join) = 複数のテーブルがあり、それらを結合するときに優先テーブルをひとつきめ、そこにある情報はすべて表示しながら、他のテーブルの情報についになるデータがあれば表示する。
-    // 優先テーブルに指定されるとそのテーブルの情報はすべて表示される。
-    $diary_sql = "SELECT `diary`.*, `members`.`nick_name`, `members`.`picture_path`, `likes_count`, `like_on`
-                  FROM `diary` 
-                  LEFT JOIN `members` ON `diary`.`user_id` = `members`.`member_id` 
-                  LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `likes_count` FROM `likes` GROUP BY `diary_id`) table1 ON `diary`.`diary_id` = `table1`.`diary_id`
-                  LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `like_on` FROM `likes` WHERE `member_id` = ? GROUP BY `diary_id`) table2 ON `diary`.`diary_id` = `table2`.`diary_id`
-                  WHERE `delete_flag` = 0 ORDER BY `diary`.`modified` DESC LIMIT $start, $page_number";
-    $diary_data = array($_SESSION['id']);
-    $diary_stmt = $dbh->prepare($diary_sql);
-    $diary_stmt->execute($diary_data);
 
-    $diary_list = array();
-    while(true){
 
-      $diary = $diary_stmt->fetch(PDO::FETCH_ASSOC);
-      if($diary == false){
-        break;
-      }
-      if ($diary['likes_count'] == null) {
-        $diary['likes_count'] = 0;
-      }
-      if ($diary['like_on'] == null) {
-        $diary['like_on'] = 0;
-      }
-      $diary_list[] = $diary;
+
+
+      // 一覧用の投稿全件取得
+      // テーブル結合
+      //  INNER JOIN と OUTER JOIN(left join と right join)
+      // INNER JOIN = 両方のテーブルに存在するデータのみ取得
+      // OUTER JOIN(left join と right join) = 複数のテーブルがあり、それらを結合するときに優先テーブルをひとつきめ、そこにある情報はすべて表示しながら、他のテーブルの情報についになるデータがあれば表示する。
+      // 優先テーブルに指定されるとそのテーブルの情報はすべて表示される。
+      $diary_sql = "SELECT `diary`.*, `members`.`nick_name`, `members`.`picture_path`, `likes_count`, `like_on`
+                    FROM `diary` 
+                    LEFT JOIN `members` ON `diary`.`user_id` = `members`.`member_id` 
+                    LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `likes_count` FROM `likes` GROUP BY `diary_id`) table1 ON `diary`.`diary_id` = `table1`.`diary_id`
+                    LEFT JOIN (SELECT diary_id, COUNT(`diary_id`) AS `like_on` FROM `likes` WHERE `member_id` = ? GROUP BY `diary_id`) table2 ON `diary`.`diary_id` = `table2`.`diary_id`
+                    WHERE `delete_flag` = 0 ORDER BY `diary`.`modified` DESC LIMIT $start, $page_number";
+      $diary_data = array($_SESSION['id']);
+      $diary_stmt = $dbh->prepare($diary_sql);
+      $diary_stmt->execute($diary_data);
+
+      $diary_list = array();
+      while(true){
+
+        $diary = $diary_stmt->fetch(PDO::FETCH_ASSOC);
+        if($diary == false){
+          break;
+        }
+        if ($diary['likes_count'] == null) {
+          $diary['likes_count'] = 0;
+        }
+        if ($diary['like_on'] == null) {
+          $diary['like_on'] = 0;
+        }
+        $diary_list[] = $diary;
+    }
   }
   // echo '<pre>';
   // var_dump($diary_list);
@@ -204,6 +267,7 @@
       <div class="col-md-4 content-margin-top">
         <legend>ようこそ<a href="profile.php"><?php echo $login_user['nick_name'] ?></a>さん！</legend>
         <form method="post" action="" class="form-horizontal" role="form" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="post">
             <!-- つぶやき -->
             <div class="form-group">
               <span>Picture:</span><input type="file" name="image_path" style="display: inline-block;"><br>
@@ -222,13 +286,13 @@
                 <?php if ($page == 1): ?>
                   <li>前</li>
                 <?php else: ?>
-                  <li><a href="index.php?page=<?php echo $page -1; ?>" class="btn btn-default">前</a></li>
+                  <li><a href="index.php?page=<?php echo $page -1; ?>&search=<?php echo $_GET['search'] ?>" class="btn btn-default">前</a></li>
                 <?php endif ?>
                 &nbsp;&nbsp;|&nbsp;&nbsp;
                 <?php if ($page == $all_page_number): ?>
                   <li>次</li>
                 <?php else: ?>
-                  <li><a href="index.php?page=<?php echo $page +1; ?>" class="btn btn-default">次</a></li>
+                  <li><a href="index.php?page=<?php echo $page +1; ?>&search=<?php echo $_GET['search'] ?>" class="btn btn-default">次</a></li>
                 <?php endif ?>
                 <li><?php echo $page; ?>/<?php echo $all_page_number; ?></li>
           </ul>
@@ -239,6 +303,17 @@
       </div>
 
       <div class="col-md-8 content-margin-top">
+        <div class="search">
+          <form action="" method="get">
+            <input type="text" name="search" placeholder="検索">
+            <input type="submit" value="検索">
+          </form>
+        </div>
+        <div>
+          <?php if (isset($_GET['search'])): ?>
+          <p>検索: <?php echo $_GET['search'] ?></p>
+          <?php endif ?>
+        </div>
         <?php foreach($diary_list as $diary): ?>
         <div class="msg">
           <?php if ($diary['reply_diary_id'] > -1): ?>
@@ -298,5 +373,6 @@
     <script src="assets/js/jquery-3.1.1.js"></script>
     <script src="assets/js/jquery-migrate-1.4.1.js"></script>
     <script src="assets/js/bootstrap.js"></script>
+    <script src="index.js"></script>
   </body>
 </html>
